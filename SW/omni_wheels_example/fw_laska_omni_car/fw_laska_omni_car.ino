@@ -22,10 +22,15 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
+#include "laskagamepad.hpp"
 #include "laskacar.hpp"
+#include "laskacar_beacon.hpp"
 
 #define CHANNEL 1
 #define DIVIDER_RATIO 2.599   //new
+// 8.4 100
+// 6.0   0
+
 
 #define ADCpin 34
 ESP32AnalogRead adc;
@@ -34,81 +39,120 @@ ESP32AnalogRead adc;
 #define low_batt 6.7
 #define AUTO_OFF 23
 
+// disable Adafruit splash logo
+#define SH110X_NO_SPLASH
+
 Adafruit_MotorShield AFMS = Adafruit_MotorShield(0x40);
 Adafruit_DCMotor *BackLeftMotor = AFMS.getMotor(4);
 Adafruit_DCMotor *BackRightMotor = AFMS.getMotor(1);
-Adafruit_DCMotor *FrontRightMotor = AFMS.getMotor(2);
-Adafruit_DCMotor *FrontLeftMotor = AFMS.getMotor(3);
+Adafruit_DCMotor *FrontRightMotor = AFMS.getMotor(3);
+Adafruit_DCMotor *FrontLeftMotor = AFMS.getMotor(2);
 LaskaOmniCar laska_omni_car(BackLeftMotor, BackRightMotor, FrontLeftMotor, FrontRightMotor);
 
-typedef struct gamepad_message {
-  long batt;
-  long lx;
-  long ly;
-  long rx;
-  long ry;
-  long b;
-  int b2;
-  bool off;
-} GAMEPAD_MESSAGE;
+struct Message {
+  LaskaGamepad gamepad_inputs;
+  uint8_t battery_v;  // voltage * 10
+  uint8_t off;
+};
+Message m;
 
-GAMEPAD_MESSAGE myData;
-
-int motorSpeed = 255;
-int lyval = 127;
-int lxval = 127;
-int ryval = 127;
-int rxval = 127;
-int triangle;
-int cross;
-int up;
-int dwn;
-int left;
-int right;
-int beac_run;
-int spd = 100;
-
-float reading;
+float battery_car_v;
 unsigned long previousMillis = 0;
 
-// Init ESP Now with fallback
-void InitESPNow() {
-  WiFi.disconnect();
-  if (esp_now_init() == ESP_OK) {
-    Serial.println("ESPNow Init Success");
+Beacon beacon(16);
+LeftRightBeaconPattern lrbp(&beacon);
+
+Adafruit_SH1106G display(128, 64, &Wire);
+
+
+int display_refresh = 0;
+unsigned long gamepad_watchdog_timer = 0;
+
+
+uint8_t gamepads[2][6] = {
+  {0x80, 0x65, 0x99, 0x96, 0x6B, 0x3C},  // black
+  {0x24, 0x58, 0x7C, 0x01, 0xF9, 0xA8} // pink
+};
+
+esp_now_peer_info_t peerInfo;
+
+
+bool mac_compare(const uint8_t mac1[6], const uint8_t mac2[6]) {
+  for (int i = 0; i < 1; i++) {
+    if (mac1[i] != mac2[i]) {
+      return false;
+    }
   }
-  else {
-    Serial.println("ESPNow Init Failed");
-    // Retry InitESPNow, add a counte and then restart?
-    // InitESPNow();
-    // or Simply Restart
-    ESP.restart();
-  }
+  return true;
 }
 
+
+// esp-now callback
+void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
+  // char macStr[18];
+  // snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+  //          mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  memcpy(&m, data, sizeof(m));
+
+  if (data_len != 12) {
+    return;
+  }
+
+  laska_omni_car.move(m.gamepad_inputs.right_stick_y >> 7,
+                      m.gamepad_inputs.right_stick_x >> 7,
+                      m.gamepad_inputs.left_stick_x >> 7);
+  gamepad_watchdog_timer = millis();
+}
+
+
+uint8_t get_battery_status() {
+  float empty = 6.0, full = 8.4;
+  battery_car_v = adc.readVoltage() * DIVIDER_RATIO;
+  uint8_t battery_car_percent = 100 * (battery_car_v - empty) / (full - empty);
+  return battery_car_percent;
+}
+
+void display_battery_status() {
+  display.clearDisplay();
+  display.setCursor(0, 10);
+  display.print(get_battery_status());
+  display.print("%");
+}
+
+
+void poweroff(void){
+  tone(PIN_BUZZ,500,500);
+  digitalWrite(AUTO_OFF, HIGH);
+}
+
+
 void setup() {
+  Serial.begin(115200);
+  delay(500);
+
   pinMode(AUTO_OFF, OUTPUT);
   digitalWrite(AUTO_OFF, LOW);
-  pinMode(16, INPUT_PULLUP);
-  Wire.begin(21, 22);
-  Serial.begin(115200);
-  delay(1000);
+
+  // display
+  display.begin(0x3C, true); // Address 0x3C default
+  display.setTextColor(SH110X_WHITE);
+  // display.setTextSize(1);
+  // display.setCursor(0, 0);
+  // display.print("Battery voltage:");
+  display.setTextSize(5);
+
+  // battery voltage measurement
   adc.attach(ADCpin);
+  // battery_car_v = adc.readVoltage() * DIVIDER_RATIO;
+  // display.clearDisplay();
+  // display.setCursor(0, 20);
+  // display.print(battery_car_v);
+  // Serial.println(battery_car_v);
 
-  tone(PIN_BUZZ,1000,200);
-
-  // WiFi.mode(WIFI_MODE_STA);
-  // Serial.println(WiFi.macAddress());
-  // return;
+  display_battery_status();
 
   WiFi.mode(WIFI_STA);
-  // WiFi.mode(WIFI_AP);
-  // configure device AP mode
-  // configDeviceAP();
-  // This is the mac address of the Slave in AP Mode
-  // Serial.print("AP MAC: "); Serial.println(WiFi.softAPmacAddress());
-  // Init ESPNow with a fallback logic
-  // InitESPNow();
+
   if (esp_now_init() != ESP_OK) {
     Serial.println("esp now failed");
   } else {
@@ -121,54 +165,73 @@ void setup() {
 
   // start adafruit motor shield
   AFMS.begin();
-  reading = adc.readVoltage();
+
+
+  // init the beacon pattern
+  // lrbp.init();
+
+  // signal that setup is complete
+  tone(PIN_BUZZ,1000,200);
+
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  memcpy(peerInfo.peer_addr, gamepads[0], 6);
+  esp_now_add_peer(&peerInfo);
+  // memcpy(peerInfo.peer_addr, gamepads[1], 6);
+  // esp_now_add_peer(&peerInfo);
 }
 
-// callback when data is recv from Master
-void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
-  char macStr[18];
-  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  memcpy(&myData, data, sizeof(myData));
-  Serial.print("Recv from: "); Serial.println(macStr);
-  Serial.print("BATT: "); Serial.print(myData.batt);
-  Serial.print("\tLX: "); Serial.print(myData.lx);
-  Serial.print("\tLY: "); Serial.print(myData.ly);
-  Serial.print("\tRX: "); Serial.print(myData.rx);
-  Serial.print("\tRY: "); Serial.print(myData.ry);
-  Serial.print("\tB: "); Serial.print(myData.b, BIN);
-  Serial.print("\tB2: "); Serial.print(myData.b2, BIN);
-  Serial.println("");
-  // tone(PIN_BUZZ,500,500);
 
-  lyval = myMap(myData.ly, 17000, 0, 0, 255);
-  lxval = myMap(myData.lx, 17000, 0, 0, 255);
-  rxval = myMap(myData.rx, 17000, 0, 0, 255);
-  ryval = myMap(myData.ry, 17000, 0, 0, 255);
-
-  // if (myData.off) {
-  //   Serial.println("mydataofff"); 
-  //   poweroff();
-  // }
-  laska_omni_car.move(ryval, rxval, lxval);
-}
-
-void loop() {}
-
-void poweroff(void){
-  tone(PIN_BUZZ,500,500);
-  //pinMode(AUTO_OFF, OUTPUT);
-  digitalWrite(AUTO_OFF, HIGH);
-}
-
-long myMap(long x, long in_min, long in_max, long out_min, long out_max)
-{
-  long in_size = in_max - in_min;
-  long out_size = out_max - out_min;
-  if( abs(in_size) > abs(out_size) )
-  {
-    if( in_size < 0 ) in_size--; else in_size++;
-    if( out_size < 0 ) out_size--; else out_size++;
+void loop() {
+  // gamepad connection watchdog
+  unsigned long current = millis();
+  if (current - gamepad_watchdog_timer >= 200) {
+    laska_omni_car.move(0, 0, 0);  // stop the car
+    m.gamepad_inputs.buttons = 0;  // unpress all buttons
   }
-  return (x - in_min) * (out_size) / (in_size) + out_min;
+
+
+  display_refresh++;
+  // refresh once every 10s
+  if (display_refresh > 20 * 10) {
+    display_battery_status();
+    display.display();
+    display_refresh = 0;
+  }
+
+  // make noise when cross is pressed
+  if (m.gamepad_inputs.get_button(LaskaGamepadButton::CROSS)) {
+    tone(PIN_BUZZ, 500, 55);
+  }
+
+  // start beacon when triangle is pressed
+  if (m.gamepad_inputs.get_button(LaskaGamepadButton::TRIANGLE)) {
+    lrbp.init();
+  }
+
+  // stop beacon when square is pressed
+  if (m.gamepad_inputs.get_button(LaskaGamepadButton::SQUARE)) {
+    beacon.leds_state = 0;
+  }
+
+  // power off the car when select is pressed or battery is <= 30%
+  if (m.gamepad_inputs.get_button(LaskaGamepadButton::START) ||
+      get_battery_status() <= 30) {
+    poweroff();
+  }
+
+  // handle the beacon lighting
+  lrbp.step();
+  beacon.write();
+
+  // full light front when l1 is pressed
+  // must be handled after beacon lighting to override it
+  if (m.gamepad_inputs.get_button(LaskaGamepadButton::L1)) {
+    beacon.leds.fill(beacon.leds.Color(255, 255, 255), 8, 8);
+  }
+
+  beacon.leds.show();
+  delay(50);
 }
+
+

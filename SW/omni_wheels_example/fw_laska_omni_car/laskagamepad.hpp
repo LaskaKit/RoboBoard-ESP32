@@ -26,13 +26,13 @@ enum LaskaGamepadButton {
   R3 = 0x1 << 15
 };
 
+
 struct LaskaGamepad {
   int16_t left_stick_x;
   int16_t left_stick_y;
   int16_t right_stick_x;
   int16_t right_stick_y;
   uint16_t buttons;
-
 
   bool get_button(LaskaGamepadButton button) {
     return GET_BIT(this->buttons, button);

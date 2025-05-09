@@ -1,13 +1,13 @@
 #include <Adafruit_MotorShield.h>
 
 class LaskaOmniCar {
-private:
+  private:
   Adafruit_DCMotor *BackLeftMotor;
   Adafruit_DCMotor *BackRightMotor;
   Adafruit_DCMotor *FrontRightMotor;
   Adafruit_DCMotor *FrontLeftMotor;
 
-public:
+  public:
   LaskaOmniCar(Adafruit_DCMotor *BackLeftMotor,
       Adafruit_DCMotor *BackRightMotor,
       Adafruit_DCMotor *FrontRightMotor,
@@ -23,7 +23,7 @@ public:
    */
   void move(int frontback, int leftright, int spin);
 
-private:
+  private:
   /**
    *  Runs the motor with specified speed and direction.
    *  Direction is expressed as the sign of speed value.

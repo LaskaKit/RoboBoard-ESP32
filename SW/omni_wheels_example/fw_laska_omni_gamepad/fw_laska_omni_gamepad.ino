@@ -3,15 +3,10 @@
 #include "ADS1X15.h"  //Rob Tillaart ADS1X15 Library
 #include "PCF8575.h"  //Rob Tillaart PCF8575 Library
 #include <Wire.h>
-#include "WiFi.h"
+#include <WiFi.h>
 #include <esp_now.h>
 
 #include "laskagamepad.hpp"
-
-// #define CERVENE
-#define MODRE
-
-#define WDT_TIMEOUT 5
 
 
 // adc sticks, L2, R2
@@ -20,82 +15,103 @@ ADS1115 ADS(0x49);
 // buttons, io expander
 PCF8575 PCF(0x20);
 
+// neopixel led
 #define BRIGHTNESS 10
 #define LED_PIN 4
 #define NUM_LED 3
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_LED, LED_PIN, NEO_GRB + NEO_KHZ800);
 
+
+// battery
 ESP32AnalogRead adc;
 #define ADCpin 0
-#define DeviderRatio 1.7693877551
+#define DividerRatio 1.7693877551
 
+
+// hw button?
 #define OFF_PIN 5
 
-#ifdef CERVENE
-  uint8_t slaveAddress[] = {0x08, 0xD1, 0xF9, 0xC4, 0x3B, 0xA4};  //cervene auto 08:D1:F9:C4:3B:A4
-  const char * ssid = "rcar";
-#else
-  uint8_t slaveAddress[] = {0xA8, 0x42, 0xE3, 0x80, 0xE2, 0xC4};  //modre auto  A8:42:E3:80:E2:C5 A8:42:E3:80:E2:C4
-  const char * ssid = "bcar";
-#endif
-const char * wifipw = "er4xyfsrfAAA5111";  //zxc123sen85
+uint8_t cars[3][6] = {
+  // 08:D1:F9:C4:3B:A4
+  {0xA8, 0x42, 0xE3, 0x80, 0xE2, 0xC4},  // blue car
+  {0x08, 0xD1, 0xF9, 0xC4, 0x3B, 0xA4},  // red car
+  {0x08, 0xD1, 0xF9, 0xC4, 0x60, 0xE4}   // my esp for testing
+  // {0xA8, 0x42, 0xE3, 0x80, 0xE2, 0xC4}  // blue car A8:42:E3:80:E2:C4
+};
 
-typedef struct struct_message {
-  long batt;
-  long lx;
-  long ly;
-  long rx;
-  long ry;
-  long b;
-  bool off;
-} struct_message;
+uint8_t active_car = 0;
 
-struct_message myData;
+// napad: prepinat slave adresy `select` tlacitkem
+// uint8_t slaveAddress[] = {0x08, 0xD1, 0xF9, 0xC4, 0x3B, 0xA4};  //cervene auto 08:D1:F9:C4:3B:A4
+// uint8_t slaveAddress[] = {0xA8, 0x42, 0xE3, 0x80, 0xE2, 0xC4};  //modre auto  A8:42:E3:80:E2:C5 A8:42:E3:80:E2:C4
+// uint8_t slaveAddress[] = {0x08, 0xD1, 0xF9, 0xC4, 0x60, 0xE4};  // backup auto 
 
 esp_now_peer_info_t peerInfo;
 
+struct Message {
+  LaskaGamepad gamepad_inputs;
+  uint8_t battery_v;  // voltage * 10
+  uint8_t off;
+};
+
+Message message;
+
+
+// power off
 int i = 0, ii = 0;
-bool ss = false, poweroff = false;
+bool poweroff = false;
 int last = millis();
 float batt_min = 3.0;
+float batt_warn = 3.2;
 
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 
-  if (status == ESP_NOW_SEND_SUCCESS){
-    ss = true;
-  }else{
-    ss = false;
+LaskaGamepad laska_gamepad;
+
+void print_inputs(LaskaGamepad* lg) {
+  int16_t* lgg = (int16_t*)lg;
+  for (int j = 0; j < 5; j++) {
+    Serial.print(j); Serial.print(" ");
+    for (int i = 0; i < 16; i++) {
+      Serial.print((*lgg & (1 << i)) >> i);
+    }
+    lgg++;
+    Serial.println();
   }
 }
 
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_LED, LED_PIN, NEO_GRB + NEO_KHZ800);
-
-LaskaGamepad laska_gamepad;
+void print_message(Message* m) {
+  print_inputs(&m->gamepad_inputs);
+}
 
 void setup() {
   pinMode(OFF_PIN, INPUT);
 
   Serial.begin(115200);
+  
   pixels.begin();
   pixels.setBrightness(BRIGHTNESS);
-  adc.attach(ADCpin);
+
+  adc.attach(ADCpin);  // battery
+
+  // i2c
   Wire.begin(8, 10);
   ADS.begin();
-  // voltage on gamepad stick is 0-3V3
-  // so the raw value is between 0 and 26400 theoretically
+  // voltage on gamepad stick is 0-3V3 (3.31) safe margin
+  // so the raw value is between 0 and 26400 (26480) in theory
   // there are some deadzones
   ADS.setGain(1);  // +- 4.096 V
   PCF.begin();
 
-  pixels.setPixelColor(0, pixels.Color(255, 0, 0)); // R, G, B
+  pixels.setPixelColor(active_car, pixels.Color(0, 255, 0)); // R, G, B
   pixels.show();
 
   WiFi.mode(WIFI_STA);
   esp_now_init();
-  esp_now_register_send_cb(OnDataSent);
+  // esp_now_register_send_cb(OnDataSent);
 
-  memcpy(peerInfo.peer_addr, slaveAddress, 6);
+  memcpy(peerInfo.peer_addr, cars[active_car], 6);
+  // memcpy(peerInfo.peer_addr, cars[0], 6);
+  
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
          
@@ -106,26 +122,38 @@ void setup() {
 }
 
 int16_t handle_deadzones(int16_t value) {
-  // deadzone ends 100
-  // deadzone center 750
-  if (abs(value) < 750) {
+  // deadzone ends 250
+  // deadzone center 800
+  if (abs(value) < 800) {
     return 0;
   }
-  if (value > (1 << 15) - 1 - 100) {
+  if (value > (1 << 15) - 1 - 250) {
     return (1 << 15) - 1;
   }
-  if (value < -(1 << 15) + 100) {
+  if (value < -(1 << 15) + 250) {
     return -(1 << 15);
   }
   return value;
 }
 
-int16_t convert_to_16_bit(int32_t raw_value) {
-  return raw_value * 2048 / 825 - (1 << 16) / 2;
+uint16_t convert_to_16_bit(int32_t raw_value) {
+  // 65535 / 26490
+  return raw_value * 4369 / 1766 - (1 << 15);
 }
 
 int16_t read_gamepad_stick_adc(uint8_t n) {
   return handle_deadzones(convert_to_16_bit(ADS.readADC(n)));
+}
+
+void read_gamepad() {
+  // read sticks
+  laska_gamepad.left_stick_y = read_gamepad_stick_adc(0);
+  laska_gamepad.left_stick_x = read_gamepad_stick_adc(1);
+  laska_gamepad.right_stick_y = read_gamepad_stick_adc(2);
+  laska_gamepad.right_stick_x = read_gamepad_stick_adc(3);
+
+  // read buttons
+  laska_gamepad.buttons = ~(PCF.read16());
 }
 
 // the loop function runs over and over again forever
@@ -151,52 +179,66 @@ void loop() {
   
   // ADS.setGain(0);
 
-  int16_t val_0 = 0, val_1 = 0, val_2 = 0, val_3 = 0;
 
-  //myMap(myData.ly, 17490, 7, 0, 20000);
+  read_gamepad();
 
-  // read sticks
-  laska_gamepad.left_stick_y = read_gamepad_stick_adc(0);
-  laska_gamepad.left_stick_x = read_gamepad_stick_adc(1);
-  laska_gamepad.right_stick_y = read_gamepad_stick_adc(2);
-  laska_gamepad.right_stick_x = read_gamepad_stick_adc(3);
+  // check for peer select
+  if (laska_gamepad.get_button(LaskaGamepadButton::LEFT)) {
+    esp_now_del_peer(cars[active_car]);
+    active_car = 0;
+  } else if (laska_gamepad.get_button(LaskaGamepadButton::UP)) {
+    esp_now_del_peer(cars[active_car]);
+    active_car = 1;
+  } else if (laska_gamepad.get_button(LaskaGamepadButton::RIGHT)) {
+    esp_now_del_peer(cars[active_car]);
+    active_car = 2;
+  }
 
-  // Serial.print("LY: "); Serial.print(laska_gamepad.left_stick_y);
-  // Serial.print(" LX: "); Serial.print(laska_gamepad.left_stick_x);
-  // Serial.print(" RY: "); Serial.print(laska_gamepad.right_stick_y);
-  // Serial.print(" RX: "); Serial.println(laska_gamepad.right_stick_x);
+  if (laska_gamepad.buttons &
+      (LaskaGamepadButton::LEFT |
+       LaskaGamepadButton::UP |
+       LaskaGamepadButton::RIGHT)) {
+    pixels.clear();
+    pixels.setPixelColor(active_car, pixels.Color(0, 255, 0));
+    memcpy(peerInfo.peer_addr, cars[active_car], 6);
+    esp_now_add_peer(&peerInfo);
+  }
 
-  // read buttons
-  laska_gamepad.buttons = ~(PCF.read16());
+  pixels.show();
+
+  message.gamepad_inputs = laska_gamepad;
 
   // read battery
-  float batt_voltage = adc.readVoltage() * DeviderRatio;
-  Serial.print("Battery Voltage = " );
-  Serial.print(batt_voltage);
-  Serial.println("V");
+  float batt_voltage = adc.readVoltage() * DividerRatio * 10;
+  uint8_t bv = batt_voltage;
+  // Serial.print(bv); Serial.print(" ");
+  // Serial.println(batt_voltage);
+  message.battery_v = bv;
+  // Serial.print("Battery Voltage = " );
+  // Serial.print(batt_voltage);
+  // Serial.println("V");
+  // Serial.println(sizeof(m));
 
   // if (batt_voltage <= batt_min){
   //   poweroff = true;
   // }
 
+  
 
-  // esp_err_t result = esp_now_send(slaveAddress, (uint8_t *) &myData, sizeof(myData));
-  return;
-   
-  // if (result == ESP_OK) {
-  //   Serial.println("Sent with success");
-  // }else{
-  //   Serial.println("Error sending the data");
-  // }
+  // print_message(&message);
+  // Serial.println();
+  esp_err_t result = esp_now_send(cars[active_car], (uint8_t *) &message, sizeof(message));
+  // Serial.print("ESP status: ");
+  // Serial.println(result);
+  delay(10);
+  if (result == ESP_OK) {
+    Serial.println("Sent with success");
+  }else{
+    Serial.println("Error sending the data");
+  }
 
-  // if (WiFi.status() == WL_CONNECTED){
-  //   pixels.setPixelColor(0, pixels.Color(0, 255, 0)); // R, G, B
-  //   pixels.show();
-  // }else{
-  //   pixels.setPixelColor(0, pixels.Color(255, 0, 0)); // R, G, B
-  //   pixels.show();
-  // }
 
+  // send success
   // if (ss){
   //   pixels.setPixelColor(1, pixels.Color(0, 255, 0)); // R, G, B
   //   pixels.show();
@@ -205,20 +247,13 @@ void loop() {
   //   pixels.show();
   // }
 
-  // if ((batt_voltage <= batt_min) || poweroff){
+
+  // // turn off if the battery voltage is low
+  // if (batt_voltage <= batt_min){
   //   pinMode(OFF_PIN, OUTPUT);
   //   digitalWrite(OFF_PIN, LOW);
+  // } else if (batt_voltage <= batt_warn) {
+  //   pixels.setPixelColor(2, pixels.Color(255, 0, 0));
+  //   pixels.show();
   // }
-}
-
-long myMap(long x, long in_min, long in_max, long out_min, long out_max)
-{
-  long in_size = in_max - in_min;
-  long out_size = out_max - out_min;
-  if( abs(in_size) > abs(out_size) )
-  {
-    if( in_size < 0 ) in_size--; else in_size++;
-    if( out_size < 0 ) out_size--; else out_size++;
-  }
-  return (x - in_min) * (out_size) / (in_size) + out_min;
 }
