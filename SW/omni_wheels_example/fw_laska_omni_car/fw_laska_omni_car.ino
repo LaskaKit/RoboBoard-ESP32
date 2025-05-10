@@ -3,10 +3,6 @@
   the FW for the 'car' with omni wheels that is controlled from gamepad
   using esp-now protocol.
   
-  
-  Firmware for the gamepad can be found here:
-  TODO: gamepad fw link
-
   Board:  LaskaKit RoboBoard ESP32      https://www.laskakit.cz/laskakit-roboboard-esp32/?variantId=13424
   Motors: TT motor - plastic gears      https://www.laskakit.cz/tt-motor-s-prevodovkou-plastove-prevody/
   Wheels: Mecanum Omni Wheels           https://www.laskakit.cz/sada-4ks-mecanum-omni-kol-60mm/
@@ -215,8 +211,7 @@ void loop() {
   }
 
   // power off the car when select is pressed or battery is <= 30%
-  if (m.gamepad_inputs.get_button(LaskaGamepadButton::START) ||
-      get_battery_status() <= 30) {
+  if (m.gamepad_inputs.get_button(LaskaGamepadButton::START) { // ||  get_battery_status() <= 30) {
     poweroff();
   }
 
