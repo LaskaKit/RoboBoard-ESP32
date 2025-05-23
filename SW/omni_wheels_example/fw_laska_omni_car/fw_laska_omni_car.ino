@@ -38,10 +38,7 @@
 // here specify the mac address of your gamepad
 // the mac address can be optained from running
 // the get_mac_address sketch
-const uint8_t gamepad_mac_address[6] = {0x24, 0x58, 0x7C, 0x01, 0xF9, 0xA8};
-
-  //  {0x80, 0x65, 0x99, 0x96, 0x6B, 0x3C}, // black
-  //   {0x24, 0x58, 0x7C, 0x01, 0xF9, 0xA8}  // pink
+const uint8_t gamepad_mac_address[6] = {0x80, 0x65, 0x99, 0x96, 0x6B, 0x3C};
 
 // type your super secret keys here (16 bytes each)
 const char *PMK_KEY_STR = "laskakit_pmk_key";

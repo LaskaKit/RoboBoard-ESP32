@@ -25,7 +25,7 @@
 // here specify the mac address of your robo board (car)
 // the mac address can be optained from running
 // the get_mac_address.ino sketch
-const uint8_t car_mac_address[6] = {0x08, 0xD1, 0xF9, 0xC4, 0x3B, 0xA4};
+const uint8_t car_mac_address[6] = {0x08, 0xD1, 0xF9, 0xC4, 0x60, 0xE4};
 
 // type your super secret keys here (16 bytes each)
 // keys on car and gamepad must be the same
