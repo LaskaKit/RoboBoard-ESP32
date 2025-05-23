@@ -1,3 +1,6 @@
+
+![Laska OmniCar](laska_omni_car.jpg)
+
 This example consists of 2 parts.
 
 1. The vehicle with omni wheels.
