@@ -19,6 +19,22 @@
 
 #include "laskagamepad.hpp"
 
+
+// CONFIG ///////////////////////////////////////////////////////////////////////////////////
+
+// here specify the mac address of your robo board (car)
+// the mac address can be optained from running
+// the get_mac_address.ino sketch
+const uint8_t car_mac_address[6] = {0x08, 0xD1, 0xF9, 0xC4, 0x3B, 0xA4};
+
+// type your super secret keys here (16 bytes each)
+// keys on car and gamepad must be the same
+const char *PMK_KEY_STR = "laskakit_pmk_key";
+const char *LMK_KEY_STR = "laskakit_lmk_key";
+
+// END OF CONFIG ///////////////////////////////////////////////////////////////////////////////////
+
+
 // adc sticks, L2, R2
 ADS1115 ADS(0x49);
 
@@ -36,42 +52,26 @@ ESP32AnalogRead adc;
 #define ADCpin 0
 #define DividerRatio 1.7693877551
 
-// hw button?
+// ps button
 #define OFF_PIN 5
 
-// here specify the mac address of your robo board (car)
-// the mac address can be optained from running
-// the get_mac_address sketch
-uint8_t cars[3][6] = {
-    {0xA8, 0x42, 0xE3, 0x80, 0xE2, 0xC4}, // backup robo board
-    {0x08, 0xD1, 0xF9, 0xC4, 0x3B, 0xA4}, // red car
-    {0x08, 0xD1, 0xF9, 0xC4, 0x60, 0xE4}  // blue car
-};
-
-uint8_t active_car = 2;
-
-// type your super secret keys here (16 bytes each)
-static const char *PMK_KEY_STR = "laskakit_pmk_key";
-static const char *LMK_KEY_STR = "laskakit_lmk_key";
 esp_now_peer_info_t peerInfo;
 
 struct Message {
   LaskaGamepad gamepad_inputs;
   uint8_t battery_v; // voltage * 10
-  uint8_t off;
 };
 
 Message message;
 
 // power off
-int i = 0, ii = 0;
-bool poweroff = false;
-int last = millis();
 float batt_min = 3.0;
 float batt_warn = 3.2;
 
 LaskaGamepad laska_gamepad;
 
+
+// for debugging
 void print_inputs(LaskaGamepad *lg) {
   int16_t *lgg = (int16_t *)lg;
   for (int j = 0; j < 5; j++) {
@@ -85,7 +85,9 @@ void print_inputs(LaskaGamepad *lg) {
   }
 }
 
+// for debugging
 void print_message(Message *m) { print_inputs(&m->gamepad_inputs); }
+
 
 int16_t handle_deadzones(int16_t value) {
   // deadzone ends 250
@@ -120,17 +122,21 @@ void read_gamepad() {
 
   // read buttons
   laska_gamepad.buttons = ~(PCF.read16());
+
+  // read power_off button
+  laska_gamepad.off = !digitalRead(OFF_PIN);
 }
 
 void setup() {
-  pinMode(OFF_PIN, INPUT);
-
   Serial.begin(115200);
 
+  // p3 button
+  pinMode(OFF_PIN, INPUT);
+
+  // neopixels
   pixels.begin();
   pixels.setBrightness(BRIGHTNESS);
 
-  adc.attach(ADCpin); // battery
 
   // i2c
   Wire.begin(8, 10);
@@ -139,6 +145,7 @@ void setup() {
   // voltage on gamepad stick is 0-3V3 (3.31) safe margin
   // so the raw value is between 0 and 26400 (26480) in theory
   // there are some deadzones
+  adc.attach(ADCpin); // battery
   ADS.setGain(1); // +- 4.096 V
   PCF.begin();
 
@@ -147,14 +154,13 @@ void setup() {
   esp_now_set_pmk((uint8_t *)PMK_KEY_STR);
 
   // setup peer info
-  memcpy(peerInfo.peer_addr, cars[active_car], 6);
+  memcpy(peerInfo.peer_addr, car_mac_address, 6);
   peerInfo.channel = 0;
   peerInfo.encrypt = true;
   memcpy(peerInfo.lmk, LMK_KEY_STR, 16);
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
     Serial.println("Failed to add peer");
-    return;
   }
 }
 
@@ -166,7 +172,7 @@ void loop() {
   float batt_voltage = adc.readVoltage() * DividerRatio * 10;
   message.battery_v = batt_voltage;
 
-  esp_err_t result = esp_now_send(cars[active_car], (uint8_t *)&message, sizeof(message));
+  esp_err_t result = esp_now_send(car_mac_address, (uint8_t *)&message, sizeof(message));
   if (result == ESP_OK) {
     pixels.setPixelColor(1, pixels.Color(0, 255, 0)); // R, G, B
     pixels.show();
@@ -176,6 +182,5 @@ void loop() {
     pixels.show();
     Serial.println("Error sending the data");
   }
-
   delay(10);
 }

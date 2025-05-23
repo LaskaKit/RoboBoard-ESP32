@@ -32,6 +32,24 @@
 #include "laskacar_beacon.hpp"
 #include "laskagamepad.hpp"
 
+
+// CONFIG ////////////////////////////////////////////////////////////////////////
+
+// here specify the mac address of your gamepad
+// the mac address can be optained from running
+// the get_mac_address sketch
+const uint8_t gamepad_mac_address[6] = {0x24, 0x58, 0x7C, 0x01, 0xF9, 0xA8};
+
+  //  {0x80, 0x65, 0x99, 0x96, 0x6B, 0x3C}, // black
+  //   {0x24, 0x58, 0x7C, 0x01, 0xF9, 0xA8}  // pink
+
+// type your super secret keys here (16 bytes each)
+const char *PMK_KEY_STR = "laskakit_pmk_key";
+const char *LMK_KEY_STR = "laskakit_lmk_key";
+
+// ENDCONFIG ////////////////////////////////////////////////////////////////////
+
+
 #define DIVIDER_RATIO 2.599
 // 8.4V 100%
 // 6.0V   0%
@@ -57,7 +75,6 @@ LaskaOmniCar laska_omni_car(BackLeftMotor, BackRightMotor, FrontLeftMotor,
 struct Message {
   LaskaGamepad gamepad_inputs;
   uint8_t battery_v; // voltage * 10
-  uint8_t off;
 };
 Message m;
 
@@ -72,19 +89,6 @@ Adafruit_SH1106G display(128, 64, &Wire);
 int display_refresh = 0;
 unsigned long gamepad_watchdog_timer = 0;
 
-// here specify the mac address of your gamepad
-// the mac address can be optained from running
-// the get_mac_address sketch
-uint8_t gamepads[2][6] = {
-    {0x80, 0x65, 0x99, 0x96, 0x6B, 0x3C}, // black
-    {0x24, 0x58, 0x7C, 0x01, 0xF9, 0xA8}  // pink
-};
-
-uint8_t active_gamepad = 0;
-
-// type your super secret keys here (16 bytes each)
-static const char *PMK_KEY_STR = "laskakit_pmk_key";
-static const char *LMK_KEY_STR = "laskakit_lmk_key";
 esp_now_peer_info_t peerInfo;
 
 // esp-now callback
@@ -93,12 +97,15 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
   // snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
   //          mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4],
   //          mac_addr[5]);
-  // memcpy(&m, data, sizeof(m));
 
-  if (data_len != 12) {
+  // Serial.println(macStr);
+  // Serial.println(data_len);
+
+  if (data_len != sizeof(m)) {
     return;
   }
 
+  memcpy(&m, data, sizeof(m));
   laska_omni_car.move(m.gamepad_inputs.right_stick_y >> 7,
                       m.gamepad_inputs.right_stick_x >> 7,
                       m.gamepad_inputs.left_stick_x >> 7);
@@ -140,6 +147,9 @@ void setup() {
   adc.attach(ADCpin);
   display_battery_status();
 
+  // start adafruit motor shield
+  AFMS.begin();
+
   WiFi.mode(WIFI_STA);
 
   if (esp_now_init() != ESP_OK) {
@@ -153,11 +163,8 @@ void setup() {
   // get recv packer info.
   esp_now_register_recv_cb(OnDataRecv);
 
-  // start adafruit motor shield
-  AFMS.begin();
-
   // setup peer info
-  memcpy(peerInfo.peer_addr, gamepads[active_gamepad], 6);
+  memcpy(peerInfo.peer_addr, gamepad_mac_address, 6);
   peerInfo.channel = 0;
   peerInfo.encrypt = true;
   memcpy(peerInfo.lmk, LMK_KEY_STR, 16);
@@ -169,12 +176,26 @@ void setup() {
   tone(PIN_BUZZ, 1000, 200);
 }
 
+int powering_off_start = 0;
+bool powering_off = false;
+
 void loop() {
   // gamepad connection watchdog
   unsigned long current = millis();
   if (current - gamepad_watchdog_timer >= 200) {
     laska_omni_car.move(0, 0, 0); // stop the car
     m.gamepad_inputs.buttons = 0; // unpress all buttons
+  }
+
+  // handle power off from gamepad
+  // hold the P3 buttot for 1.5s to poweroff
+  if (m.gamepad_inputs.off && !powering_off) {
+    powering_off_start = millis();
+    powering_off = true;
+  } else if (m.gamepad_inputs.off && millis() - powering_off_start >= 1500) {
+    poweroff();
+  } else if (!m.gamepad_inputs.off) {
+    powering_off = false;
   }
 
   display_refresh++;
@@ -198,12 +219,6 @@ void loop() {
   // stop beacon when square is pressed
   if (m.gamepad_inputs.get_button(LaskaGamepadButton::SQUARE)) {
     beacon.leds_state = 0;
-  }
-
-  // power off the car when select is pressed or battery is <= 30%
-  if (m.gamepad_inputs.get_button(
-          LaskaGamepadButton::START)) { // ||  get_battery_status() <= 30) {
-    poweroff();
   }
 
   // handle the beacon lighting

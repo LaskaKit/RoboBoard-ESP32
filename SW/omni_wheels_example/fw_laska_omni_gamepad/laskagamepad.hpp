@@ -32,7 +32,7 @@ struct LaskaGamepad {
   int16_t right_stick_x;
   int16_t right_stick_y;
   uint16_t buttons;
-
+  bool off;
 
   bool get_button(LaskaGamepadButton button) {
     return GET_BIT(this->buttons, button);
