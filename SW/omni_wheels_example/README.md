@@ -21,3 +21,16 @@ The vehicle and gamepad are communicating via ESP-NOW protocol.
 
 You can setup your own LMK and PMK keys to keep the communication between roboboard and gamepad secure.
 Note that keys on roboboard must be identical to those on gamepad.
+
+## Controls
+
+| *Input*                      | *Description*           |
+| ---------------------------- | ----------------------- |
+| left stick (left/right)      | left/right spin         |
+| right stick (up/down)        | forward/backward motion |
+| right stick (left/right)     | left/right motion       |
+| L1                           | headlights              |
+| triangle                     | starts the beacon       |
+| square                       | stops the beacon        |
+| cross                        | horn                    |
+| P3 (1.5s hold)               | power off               |
