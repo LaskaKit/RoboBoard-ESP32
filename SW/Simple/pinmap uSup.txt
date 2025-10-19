@@ -1,0 +1,18 @@
+SPI uäup
+---------
+
+MISO    12
+MOSI    13
+SCK     14
+CS      15
+
+I2C uäup
+--------
+
+SDA     21
+SCL     22
+
+IO uäup
+--------
+
+IO      5
