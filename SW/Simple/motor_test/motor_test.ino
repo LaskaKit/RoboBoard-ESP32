@@ -1,4 +1,14 @@
-// Motor test
+/* Motor test for LaskaKit RoboBoard ESP32 V2
+ *
+ * Board:   LaskaKit RoboBoard ESP32 V2   https://www.laskakit.cz/laskakit-roboboard-esp32/
+ * 
+ * Library: https://github.com/adafruit/Adafruit_Motor_Shield_V2_Library
+ *
+ * Email:podpora@laskakit.cz
+ * Web:laskakit.cz
+ */
+
+
 #include <Adafruit_GFX.h>
 #include <Adafruit_MotorShield.h>
 

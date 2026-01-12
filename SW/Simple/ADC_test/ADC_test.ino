@@ -1,5 +1,10 @@
-// mereni napeti baterie
-// arduino-esp32 verze 3.x.x - (3.3.2)
+/* ADC test for LaskaKit RoboBoard ESP32 V2
+ *
+ * Board:   LaskaKit RoboBoard ESP32 V2   https://www.laskakit.cz/laskakit-roboboard-esp32/
+ * 
+ * Email:podpora@laskakit.cz
+ * Web:laskakit.cz
+ */
 
 #define DIVIDER_RATIO 3.5677966
 

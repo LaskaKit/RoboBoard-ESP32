@@ -1,4 +1,13 @@
-// Status LED test
+/* LED test for LaskaKit RoboBoard ESP32 V2
+ * ESP32-S3-DEVKit just changing LED color 
+ *
+ * Board:   LaskaKit RoboBoard ESP32 V2   https://www.laskakit.cz/laskakit-roboboard-esp32/
+ * 
+ * Library: https://github.com/adafruit/Adafruit_NeoPixel
+ *
+ * Email:podpora@laskakit.cz
+ * Web:laskakit.cz
+ */
 
 #include <Adafruit_NeoPixel.h>
 
