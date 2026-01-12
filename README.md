@@ -24,4 +24,11 @@ The motors are powered via the LMR14050 step-down switching inverter from the 2S
 
 The battery voltage, via the voltage divider, is fed and measured by GPIO34. 
 
+## New in version 2
+- Powering via USB
+- LiPol charging via USB
+- uŠup IO port
+- SK6812 RGB LED
+- Overall more robust design
+
 Sample codes will be prepared on our github at https://github.com/LaskaKit/RoboBoard-ESP32/tree/main/SW
