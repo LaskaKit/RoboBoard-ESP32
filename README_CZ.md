@@ -1,8 +1,8 @@
 ![RoboBoard-ESP32](https://github.com/LaskaKit/RoboBoard-ESP32/blob/main/img/LaskaKit-roboboard-esp32-2.jpg)
 
-# LaskaKit RoboBoard ESP32
+# LaskaKit RoboBoard ESP32 v2
 
-Postav robota! Neboj, není to nic složitého. S naší deskou RoboBoard-ESP32 to bude hračka. RoboBoard totiž má na sobě všechno důležité pro jednoduchého robota a časem z něj můžeš udělat i mnohem komplexnějšího robota díky rozšiřujícím konektorům pro I2C i SPI sběrnici. 
+Postav robota! Neboj, není to nic složitého. S naší deskou RoboBoard-ESP32 to bude hračka. RoboBoard totiž má na sobě všechno důležité pro jednoduchého robota a časem z něj můžeš udělat i mnohem komplexnějšího robota díky rozšiřujícím konektorům pro IO a navíc I2C a SPI sběrnice. 
 
 Připojit tak můžeš bezpočet dalších periférií. 
 
@@ -24,6 +24,13 @@ Pro baterii máme připraven standardní tří pinový konektor JST-XH-3P, kam z
 Motory jsou napájené přes spínací step-down měnič LMR14050 z 2S baterie, který dokáže dodat až 5A. 
 
 Napětí baterie, přes dělič napětí, je přivedeno a měřeno GPIO34. 
+
+## Nově ve verzi 2
+- Napájení přes USB
+- Nabíjení LiPol baterie
+- uŠup IO
+- SK6812 RGB dioda
+- Výrazně vyšší robustnost
 
 Vzorové kódy budou připraveny na našem github na adrese https://github.com/LaskaKit/RoboBoard-ESP32/tree/main/SW
 
